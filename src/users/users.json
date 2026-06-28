@@ -1,0 +1,52 @@
+[
+    {
+        "id": 1,
+        "email": "newEmail@example.com",
+        "username": "rewer",
+        "password": "$2b$12$Faee/wUgQrBVh.so5VLJY.XdFrdZ7PsG4AvHucacE9YNafOGX4Wfi",
+        "is_active": false,
+        "is_deleted": true,
+        "token_version": 1,
+        "role": "user"
+    },
+    {
+        "id": 2,
+        "email": "user@example.com",
+        "username": "user",
+        "password": "$2b$12$03lGoVfOTmg7oVlrUIfOGuDArKOiRQsJigpIfsPX11ppveWjvOecC",
+        "is_active": false,
+        "is_deleted": false,
+        "token_version": 0,
+        "role": "user"
+    },
+    {
+        "id": 3,
+        "email": "uel@example.com",
+        "username": "MelWer",
+        "password": "$2b$12$464po3XOfxn0uhMzY6ph/eybKGcUjCSrLL33FsdOp7sW4bpLAT//C",
+        "is_active": true,
+        "is_deleted": false,
+        "token_version": 0,
+        "role": "user"
+    },
+    {
+        "id": 4,
+        "email": "text1@example.com",
+        "username": "Muhahaha",
+        "password": "$2b$12$XIelWr9qrW0brqlTHsQ1IOHCAdx8Hx47p43/uo284DLn2shZdIR5O",
+        "is_active": true,
+        "is_deleted": false,
+        "token_version": 4,
+        "role": "admin"
+    },
+    {
+        "id": 5,
+        "email": "new_email@example.com",
+        "username": "ataeae",
+        "password": "$2b$12$A8tP0rjlxqGnHLu9MD0XDuqpcDBYOV3sRsPTdNXNMIVbLc9CQWnCW",
+        "is_active": true,
+        "is_deleted": false,
+        "token_version": 0,
+        "role": "user"
+    }
+]
