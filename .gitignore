@@ -1,3 +1,4 @@
 /.env
 /.venv
 /structure.txt
+/src/__pycache__

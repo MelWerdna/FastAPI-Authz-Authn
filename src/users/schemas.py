@@ -21,7 +21,6 @@ class UserUpdateSchema(BaseModel):
     username: Optional[str] = Field(
         None, min_length=3, max_length=15, description="User username"
     )
-    model_config = {"extra": "forbid"}
 
 
 class AdminUserUpdateSchema(UserUpdateSchema):
