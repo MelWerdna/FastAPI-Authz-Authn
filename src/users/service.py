@@ -1,11 +1,7 @@
-import json
-import logging
-import os
 import bcrypt
+import aiosqlite
 from fastapi import HTTPException, status
 from src.users.schemas import UserRegisterSchema
-
-JSON_FILE = os.path.join(os.path.dirname(__file__), "users.json")
 
 
 def get_password_hash(password: str) -> str:
@@ -14,137 +10,103 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(pwd_encoded, salt).decode("utf-8")
 
 
-def load_users_from_file() -> list[dict]:
-    if not os.path.exists(JSON_FILE):
-        return []
-    try:
-        with open(JSON_FILE, "r", encoding="utf-8") as file:
-            return json.load(file)
-    except json.JSONDecodeError:
-        logging.error("Error decoding JSON from users.json")
-        return []
+async def get_user_by_id(user_id: int, db: aiosqlite.Connection) -> dict:
+    cursor = await db.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    row = await cursor.fetchone()
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+    return dict(row)
 
 
-def save_users_to_file(users: list[dict]) -> None:
-    with open(JSON_FILE, "w", encoding="utf-8") as file:
-        json.dump(users, file, indent=4, ensure_ascii=False)
-
-
-def get_user_by_id(user_id: int) -> dict:
-    users = load_users_from_file()
-    for user in users:
-        if user["id"] == user_id:
-            return user
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-
-def register_new_user(user: UserRegisterSchema) -> dict:
-    users = load_users_from_file()
-
-    if any(
-        user_existing["email"].lower() == user.email.lower()
-        for user_existing in users
-        if user_existing["is_deleted"] is False
-    ):
+async def register_new_user(user: UserRegisterSchema, db: aiosqlite.Connection) -> dict:
+    cursor = await db.execute(
+        "SELECT id FROM users WHERE lower(email) = lower(?) AND is_deleted = 0",
+        (user.email,),
+    )
+    if await cursor.fetchone():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
         )
-    if any(
-        user_existing["email"].lower() == user.email.lower()
-        for user_existing in users
-        if user_existing["is_deleted"] is True
-    ):
+    cursor = await db.execute(
+        "SELECT id FROM users WHERE lower(email) = lower(?) AND is_deleted = 1",
+        (user.email,),
+    )
+    if await cursor.fetchone():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email is registered but inactive.",
         )
-
     hashed_password = get_password_hash(user.password)
-    new_id = max([user["id"] for user in users], default=0) + 1
-    new_user = {
-        "id": new_id,
-        "email": user.email,
-        "username": user.username,
-        "password": hashed_password,
-        "is_active": False,
-        "is_deleted": False,
-        "token_version": 0,
-        "role": "user",
-    }
-
-    users.append(new_user)
-    save_users_to_file(users)
-
-    return new_user
+    cursor = await db.execute(
+        "INSERT INTO users (email, username, password) VALUES (?, ?, ?) RETURNING *",
+        (user.email, user.username, hashed_password),
+    )
+    row = await cursor.fetchone()
+    await db.commit()
+    return dict(row)
 
 
-def delete_user(user_id: int) -> dict:
-    users = load_users_from_file()
-    user_to_delete = None
-    for user in users:
-        if user["id"] == user_id:
-            user_to_delete = user
-            break
-    if user_to_delete is None:
+async def delete_user(user_id: int, db: aiosqlite.Connection) -> dict:
+    cursor = await db.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    row = await cursor.fetchone()
+    if not row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
-    if user_to_delete["is_deleted"]:
+    user = dict(row)
+    if user["is_deleted"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="User is already deleted"
         )
-    users[users.index(user_to_delete)]["is_deleted"] = True
-    users[users.index(user_to_delete)]["is_active"] = False
-    users[users.index(user_to_delete)]["token_version"] = (
-        users[users.index(user_to_delete)].get("token_version", 0) + 1
+    await db.execute(
+        "UPDATE users SET is_deleted = 1, is_active = 0, token_version = token_version + 1 WHERE id = ?",
+        (user_id,),
     )
-    save_users_to_file(users)
-    return user_to_delete
+    await db.commit()
+    cursor = await db.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    return dict(await cursor.fetchone())
 
 
-def invalidate_user_token(user_id: int) -> dict:
-    users = load_users_from_file()
-    find_user = False
-    for user in users:
-        if user["id"] == user_id:
-            user["token_version"] = user.get("token_version", 0) + 1
-            save_users_to_file(users)
-            find_user = True
-            break
-
-    if not find_user:
+async def invalidate_user_token(user_id: int, db: aiosqlite.Connection) -> None:
+    cursor = await db.execute("SELECT id FROM users WHERE id = ?", (user_id,))
+    if not await cursor.fetchone():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
+    await db.execute(
+        "UPDATE users SET token_version = token_version + 1 WHERE id = ?",
+        (user_id,),
+    )
+    await db.commit()
 
 
-def update_user(user_id: int, update_data: dict) -> dict:
-    users = load_users_from_file()
-    user_to_update = None
-    for user in users:
-        if user["id"] == user_id:
-            user_to_update = user
-            break
-
-    if user_to_update is None:
+async def update_user(
+    user_id: int, update_data: dict, db: aiosqlite.Connection
+) -> dict:
+    cursor = await db.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    row = await cursor.fetchone()
+    if not row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
+    user = dict(row)
 
-    if "email" in update_data and not user_to_update["is_deleted"]:
-        for user_existing in users:
-            if (
-                user_existing["email"].lower() == update_data["email"].lower()
-                and user_existing["id"] != user_id
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Email already registered",
-                )
+    if "email" in update_data and not user["is_deleted"]:
+        cursor = await db.execute(
+            "SELECT id FROM users WHERE lower(email) = lower(?) AND id != ?",
+            (update_data["email"], user_id),
+        )
+        if await cursor.fetchone():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered",
+            )
 
-    for key, value in update_data.items():
-        if value is not None:
-            user_to_update[key] = value
-
-    save_users_to_file(users)
-    return user_to_update
+    set_clauses = ", ".join(f"{key} = ?" for key in update_data)
+    values = list(update_data.values()) + [user_id]
+    await db.execute(f"UPDATE users SET {set_clauses} WHERE id = ?", values)
+    await db.commit()
+    cursor = await db.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    return dict(await cursor.fetchone())

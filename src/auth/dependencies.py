@@ -1,15 +1,18 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from src.users import service
+from src.database import get_db
 from src.config import settings
+import aiosqlite
 import jwt
+
 
 bearer = HTTPBearer()
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer),
-) -> int:
+    db: aiosqlite.Connection = Depends(get_db),
+):
 
     token = credentials.credentials
     try:
@@ -24,27 +27,21 @@ async def get_current_user(
             detail="Invalid token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    user = service.load_users_from_file()
-    find_user = None
-    for user_existing in user:
-        if user_existing["id"] == user_id:
-            find_user = user_existing
-            break
-
+    cursor = await db.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    find_user = await cursor.fetchone()
     if not find_user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
+    find_user = dict(find_user)
     if find_user.get("token_version", 0) != token_version:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has been invalidated (user logged out)",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
     return find_user
 
 

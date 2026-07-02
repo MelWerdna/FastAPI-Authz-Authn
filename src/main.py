@@ -1,9 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+
+from contextlib import asynccontextmanager
+from src.database import init_db
 from src.config import settings
 from src.users.router import router as users_router
 from src.auth.router import router as auth_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
 
 
 app = FastAPI(
@@ -11,6 +20,7 @@ app = FastAPI(
     description="FastAPI AuthN and AuthZ service",
     version="1.1.0",
     debug=settings.DEBUG,
+    lifespan=lifespan,
 )
 
 origins = ["*"]

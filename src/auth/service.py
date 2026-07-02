@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta, timezone
 import jwt
 import bcrypt
+import aiosqlite
 from fastapi import HTTPException, status
 from src.config import settings
-from src.users.service import load_users_from_file, save_users_to_file
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -23,51 +23,28 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return jwt_token
 
 
-def authenticate_user(email: str, password: str) -> dict | None:
-    users = load_users_from_file()
-    user = None
-    for user_existing in users:
-        if (
-            user_existing["email"].lower() == email.lower()
-            and not user_existing["is_deleted"]
-        ):
-            user = user_existing
-            user_existing.update({"is_active": True})
-            save_users_to_file(users)
-            break
-
-    if not user or user["is_deleted"]:
+async def authenticate_user(
+    email: str, password: str, db: aiosqlite.Connection
+) -> dict:
+    cursor = await db.execute(
+        "SELECT * FROM users WHERE lower(email) = lower(?) AND is_deleted = 0",
+        (email,),
+    )
+    row = await cursor.fetchone()
+    if not row:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials: invalid email or deleted user",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    user = dict(row)
     if not verify_password(password, user["password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials: invalid password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    if not user["is_active"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is already logged in",
-        )
+    await db.execute("UPDATE users SET is_active = 1 WHERE id = ?", (user["id"],))
+    await db.commit()
+    user["is_active"] = 1
     return user
-
-
-def logout_user(user_id: int) -> dict:
-    users = load_users_from_file()
-    user_to_logout = None
-    for user in users:
-        if user["id"] == user_id and user["is_active"]:
-            user_to_logout = user
-            break
-    if user_to_logout is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
-
-    user_to_logout["is_active"] = False
-    save_users_to_file(users)
-    return user_to_logout
