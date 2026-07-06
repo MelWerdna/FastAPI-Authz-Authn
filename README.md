@@ -18,8 +18,9 @@ git clone https://github.com/MelWerdna/FastAPI-Authz-Authn.git
 ```
 python -m venv .venv
 .venv\Scripts\activate # Windows
-```       
 # source .venv/bin/activate   # Linux/macOS
+```       
+
 
 # 3. Установить зависимости
 ```
