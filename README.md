@@ -35,12 +35,11 @@ JWT_SECRET_KEY=your-secret-key
 DEBUG=False
 DATABASE_URL=db.sqlite3
 ```
+# 5. Запустить сервер
 
 ```bash
-# 5. Запустить сервер
 uvicorn src.main:app --reload
 ```
 
-Приложение будет доступно по адресу: http://127.0.0.1:8000
+SWAGGER UI: http://127.0.0.1:8000
 
-Документация API: http://127.0.0.1:8000/docs
