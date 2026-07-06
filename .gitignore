@@ -6,3 +6,4 @@ src/**/__pycache__/
 *$py.class
 src/__pycache__/
 src/users/users.json
+src/authAPi.db
